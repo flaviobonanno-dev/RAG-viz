@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAG viz</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef2f6;--panel:#fff;--ink:#14202e;--mute:#66768a;--line:#d3dce6;--acc:#0b5fff;--grid:#dde5ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1520;--panel:#142030;--ink:#e6edf5;--mute:#8a9bb0;--line:#243449;--acc:#4d8dff;--grid:#162335}}
+:root[data-theme="dark"]{--bg:#0d1520;--panel:#142030;--ink:#e6edf5;--mute:#8a9bb0;--line:#243449;--acc:#4d8dff;--grid:#162335}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 "IBM Plex Sans",system-ui,sans-serif;display:grid;grid-template-columns:260px 1fr 340px;overflow:hidden}
+aside,section{min-height:0;display:flex;flex-direction:column}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:16px;gap:12px;overflow:auto}
+.res{background:var(--panel);border-left:1px solid var(--line);padding:16px;gap:10px;overflow:auto}
+h1{font-size:20px;margin:0;font-weight:600;letter-spacing:-.01em}h2{font-size:13px;margin:0;color:var(--mute);font-weight:600}
+.drop{border:1.5px dashed var(--line);border-radius:6px;padding:16px;text-align:center;color:var(--mute);cursor:pointer}
+.drop.on,.drop:hover{border-color:var(--acc);color:var(--acc)}
+button{font:inherit;color:var(--ink);background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.f{display:flex;align-items:center;gap:8px;padding:4px 0}.f i{width:10px;height:10px;border-radius:50%;flex:none}
+.f span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.f small{color:var(--mute)}.f b{cursor:pointer;color:var(--mute);font-weight:400}
+.stage{position:relative;min-width:0}canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.bar{position:absolute;left:16px;right:16px;top:16px;display:flex;gap:8px}
+.bar input{flex:1;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);box-shadow:0 2px 10px #0003}
+#tip{position:absolute;pointer-events:none;max-width:280px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12px;display:none}
+.leg{position:absolute;left:16px;bottom:12px;color:var(--mute);font-size:12px}
+.card{border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px}.card.h{border-color:var(--acc)}
+.card header{display:flex;justify-content:space-between;gap:8px;color:var(--mute);font-size:12px;margin-bottom:4px}
+.card header b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt{height:3px;background:var(--line);border-radius:2px;margin-bottom:6px}.bt div{height:100%;background:var(--acc);border-radius:2px}
+mark{background:#ffd43b66;color:inherit;border-radius:2px}
+.sec{border:1px solid var(--line);border-radius:6px;padding:8px 10px}.sec.off .f{opacity:.45}
+.sh{display:flex;align-items:center;gap:8px;margin-bottom:2px}.sh input[type=text]{flex:1;min-width:0;font:inherit;font-weight:600;border:0;background:none;color:var(--ink);padding:2px;border-radius:4px}.sh small{color:var(--mute)}.sh b{cursor:pointer;color:var(--mute);font-weight:400}
+.sw{position:relative;width:34px;height:20px;flex:none}.sw input{opacity:0;position:absolute;inset:0;margin:0;cursor:pointer;z-index:1}.sw i{position:absolute;inset:0;background:var(--line);border-radius:10px;transition:.15s}.sw i:after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}.sw input:checked+i{background:var(--acc)}.sw input:checked+i:after{left:16px}.sw input:focus-visible+i{outline:2px solid var(--acc);outline-offset:2px}
+select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px}.f select{max-width:78px;font-size:11px;padding:2px}
+.row{display:flex;gap:6px}.row>*{flex:1}
+.empty{color:var(--mute)}
+@media(max-width:900px){body{grid-template-columns:1fr;grid-template-rows:auto 55vh auto;overflow:auto;height:auto}html,body{height:auto}.side,.res{border:0}}
+</style></head><body>
+<aside class="side">
+ <h1>RAG viz</h1>
+ <div class="drop" id="drop" tabindex="0">Trascina qui i file<br><small>.pdf .json .txt .md .csv</small></div>
+ <input id="fi" type="file" multiple accept=".pdf,.json,.txt,.md,.csv" hidden>
+ <label class="empty" style="font-size:12px">Aggiungi alla sezione<select id="tsec" style="width:100%"></select></label>
+ <div class="row"><button id="nsec">+ Sezione</button><button id="demo">Esempio</button></div>
+ <div class="row"><button id="save">Salva .json</button><button id="load">Apri .json</button></div>
+ <input id="lf" type="file" accept=".json" hidden>
+ <h2 id="stat">Nessun documento</h2><div id="files"></div>
+ <p class="empty" style="font-size:12px">Indice locale nel browser: vettori TF‑IDF con n‑grammi di caratteri, proiettati in 2D con PCA. Nessun file lascia il tuo dispositivo.</p>
+</aside>
+<section class="stage" id="stage">
+ <canvas id="cv"></canvas>
+ <div class="bar"><input id="q" placeholder="Fai una domanda ai tuoi documenti…" autocomplete="off" aria-label="Cerca"></div>
+ <div id="tip"></div>
+ <div class="leg">Punti = frammenti · anelli = documenti · etichette = parole · rotella per zoom, trascina per spostare</div>
+</section>
+<aside class="res"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Frammenti più vicini</h2><button id="cp">Copia contesto</button></div><div id="out"><p class="empty">Carica dei file e scrivi una query: i risultati compaiono mentre digiti.</p></div></aside>
+<script>
+const D=1024,$=s=>document.querySelector(s);
+const STOP=new Set("il lo la i gli le un una uno di a da in con su per tra fra e ed o ma che non è sono del della dei delle al alla ai si come più nel nella the of and to in is are an for on with that this it as by be at or from".split(" "));
+const COL=["#e8590c","#1c7ed6","#2f9e44","#ae3ec9","#f08c00","#0c8599","#d6336c","#5c940d"];
+let docs=[],chunks=[],idf=null,vocab=new Map(),pcs=null,mean=null,S=1,terms=[];
+let secs=[{id:"s1",name:"Generale",on:true}],nid=2,tsel="s1";
+let view={k:1,x:0,y:0},hover=-1,pin=-1,Q={top:[],pos:[0,0],cur:null,terms:[],toks:[],t:0};
+const pdfjs=window.pdfjsLib;if(pdfjs)pdfjs.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const tok=s=>((s.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu))||[]).filter(w=>!STOP.has(w));
+function H(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0)%D}
+function counts(t){const m=new Map(),a=(k,v)=>m.set(k,(m.get(k)||0)+v);for(const w of t){a(H(w),1);const p="#"+w+"#";if(p.length>5)for(let i=0;i<p.length-2;i++)a(H("3"+p.substr(i,3)),.3)}return m}
+function norm(v){let n=0;for(const x of v)n+=x*x;n=Math.sqrt(n)||1;for(let i=0;i<v.length;i++)v[i]/=n;return v}
+const dot=(a,b)=>{let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* ---------- parsing ---------- */
+function jl(o,p=""){const out=[];if(Array.isArray(o))o.forEach((x,i)=>{x&&typeof x==="object"?out.push(...jl(x,p+"["+i+"]")):out.push(p+": "+x)});
+else if(o&&typeof o==="object"){const pr=[];for(const[k,v]of Object.entries(o))v&&typeof v==="object"?out.push(...jl(v,k)):pr.push(k+": "+v);if(pr.length)out.unshift(pr.join(", "))}else out.push(p+": "+o);return out}
+function csv(t){const d=(t.split("\n")[0].match(/;/g)||[]).length>(t.split("\n")[0].match(/,/g)||[]).length?";":",";const rows=[];let r=[],c="",q=false;
+for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=false}else c+=ch}else if(ch=='"')q=true;else if(ch==d){r.push(c);c=""}else if(ch=="\n"||ch=="\r"){if(ch=="\r"&&t[i+1]=="\n")i++;r.push(c);c="";if(r.some(x=>x.trim()))rows.push(r);r=[]}else c+=ch}
+if(c||r.length){r.push(c);rows.push(r)}const h=rows.shift()||[];return rows.map(x=>x.map((v,i)=>(h[i]||"c"+i)+": "+v).join(", ")).join("\n")}
+async function pdf(buf){const d=await pdfjs.getDocument({data:buf}).promise;let o="";for(let i=1;i<=d.numPages;i++){const p=await d.getPage(i),c=await p.getTextContent();o+=c.items.map(x=>x.str).join(" ")+"\n\n"}return o}
+async function read(f){const e=f.name.split(".").pop().toLowerCase();
+if(e=="pdf")return pdf(await f.arrayBuffer());const t=await f.text();
+if(e=="json"){try{return jl(JSON.parse(t)).join("\n")}catch(_){return t}}if(e=="csv")return csv(t);return t}
+function split(text,name){const segs=text.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean),out=[];let cur=[],n=0;
+for(const s of segs){cur.push(s);n+=s.split(/\s+/).length;if(n>=35){out.push(cur.join(" "));cur=[];n=0}}if(cur.length)out.push(cur.join(" "));return out}
+async function ingest(files,sec){for(const f of files){const e=f.name.split(".").pop().toLowerCase();if(!["pdf","json","txt","md","csv"].includes(e))continue;
+if(e=="json"){try{const o=JSON.parse(await f.text());if(o&&o.app==="rag-viz"){loadState(o);continue}}catch(_){}}
+$("#stat").textContent="Leggo "+f.name+"…";try{const t=await read(f);docs.push({name:f.name,sec:sec||tsel,color:COL[docs.length%COL.length],parts:split(t)});{const s0=secs.find(x=>x.id==(sec||tsel));if(s0)s0.on=true}}catch(err){$("#stat").textContent="Errore su "+f.name+": "+err.message;return}}
+rebuild()}
+/* ---------- index ---------- */
+function rebuild(){chunks=[];pin=-1;hover=-1;docs.forEach((d,di)=>{if(secOn(d))d.parts.forEach(p=>chunks.push({d:di,text:p,t:tok(p)}))});
+const N=chunks.length;vocab=new Map();
+renderSecs();
+$("#stat").textContent=N?docs.filter(secOn).length+"/"+docs.length+" documenti attivi · "+N+" frammenti":(docs.length?"Nessuna sezione attiva":"Nessun documento");
+if(!N){pcs=null;Q.top=[];Q.terms=[];Q.cur=null;render();persist();return}
+const df=new Float32Array(D);chunks.forEach((c,i)=>{c.c=counts(c.t);for(const k of c.c.keys())df[k]++;for(const w of new Set(c.t)){if(!vocab.has(w))vocab.set(w,[]);vocab.get(w).push(i)}});
+idf=Float32Array.from(df,x=>Math.log((N+1)/(x+1))+1);
+chunks.forEach(c=>{c.v=new Float32Array(D);for(const[k,x]of c.c)c.v[k]=(1+Math.log(x))*idf[k];norm(c.v)});
+pca();terms=[...vocab.entries()].filter(([w,a])=>a.length>=2&&a.length<N*.6).map(([w,a])=>[w,a.length*Math.log(N/a.length+1)]).sort((a,b)=>b[1]-a[1]).slice(0,70).map(x=>x[0]);
+view={k:1,x:0,y:0};run();persist()}
+function pca(){const N=chunks.length;mean=new Float32Array(D);chunks.forEach(c=>{for(let i=0;i<D;i++)mean[i]+=c.v[i]/N});
+const X=chunks.map(c=>Float32Array.from(c.v,(x,i)=>x-mean[i]));pcs=[];
+for(let p=0;p<2;p++){let v=Float32Array.from({length:D},()=>Math.random()-.5);
+for(let it=0;it<25;it++){if(p){const a=dot(v,pcs[0]);for(let i=0;i<D;i++)v[i]-=a*pcs[0][i]}const w=new Float32Array(D);
+for(const r of X){const d=dot(r,v);for(let i=0;i<D;i++)w[i]+=d*r[i]}v=norm(w)}pcs.push(v)}
+let m=1e-9;chunks.forEach((c,i)=>{c.x=dot(X[i],pcs[0]);c.y=dot(X[i],pcs[1]);m=Math.max(m,Math.abs(c.x),Math.abs(c.y))});
+S=1/m;chunks.forEach(c=>{c.x*=S;c.y*=S})}
+const wpos=w=>{const a=vocab.get(w);if(!a)return null;let x=0,y=0;a.forEach(i=>{x+=chunks[i].x;y+=chunks[i].y});return[x/a.length,y/a.length]};
+/* ---------- query ---------- */
+function run(){const q=$("#q").value.trim();Q.toks=tok(q);
+if(!chunks.length||!Q.toks.length){Q.top=[];Q.terms=[];Q.cur=null;render();return}
+const qv=new Float32Array(D);for(const[k,x]of counts(Q.toks))qv[k]=(1+Math.log(x))*idf[k];norm(qv);
+const sims=chunks.map((c,i)=>[i,dot(qv,c.v)]).sort((a,b)=>b[1]-a[1]);
+Q.top=sims.slice(0,8).filter(s=>s[1]>.04);
+if(!Q.top.length){Q.cur=null;Q.terms=[];render();return}
+let sx=0,sy=0,sw=0;Q.top.slice(0,5).forEach(([i,s])=>{const w=s*s;sx+=chunks[i].x*w;sy+=chunks[i].y*w;sw+=w});Q.pos=[sx/sw,sy/sw];if(!Q.cur)Q.cur=[...Q.pos];
+const sc=new Map();Q.top.forEach(([i,s])=>{for(const w of new Set(chunks[i].t))sc.set(w,(sc.get(w)||0)+s*(Q.toks.includes(w)?3:1)*Math.log(chunks.length/(vocab.get(w).length)+1))});
+Q.terms=[...sc.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10).map(x=>x[0]);Q.t=0;render()}
+function render(){const o=$("#out");const list=pin>=0?[[pin,null]].concat(Q.top.filter(s=>s[0]!=pin)):Q.top;
+if(!list.length){o.innerHTML='<p class="empty">'+(chunks.length?"Scrivi una query per vedere i frammenti più vicini.":"Carica dei file e scrivi una query.")+"</p>";return}
+const re=Q.toks.length?new RegExp("("+Q.toks.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","giu"):null;
+o.innerHTML=list.map(([i,s])=>{const c=chunks[i],d=docs[c.d];let t=esc(c.text);if(re)t=t.replace(re,"<mark>$1</mark>");
+return`<div class="card${i==hover?" h":""}" data-i="${i}"><header><b style="color:${d.color}">${esc(d.name)}</b><span>${s==null?"selezionato":Math.round(s*100)+"%"}</span></header>${s==null?"":`<div class="bt"><div style="width:${Math.min(100,s*140)}%"></div></div>`}${t}</div>`}).join("")}
+/* ---------- canvas ---------- */
+const cv=$("#cv"),ctx=cv.getContext("2d");let W=0,Hh=0,dpr=1;
+function size(){const r=cv.getBoundingClientRect();dpr=devicePixelRatio||1;W=r.width;Hh=r.height;cv.width=W*dpr;cv.height=Hh*dpr}
+new ResizeObserver(size).observe(cv);
+const R=()=>Math.min(W,Hh)*.4*view.k,P=(x,y)=>[W/2+view.x+x*R(),Hh/2+view.y+y*R()];
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function draw(){requestAnimationFrame(draw);ctx.setTransform(dpr,0,0,dpr,0,0);const bg=cssv("--bg"),ink=cssv("--ink"),mute=cssv("--mute"),acc=cssv("--acc");
+ctx.clearRect(0,0,W,Hh);ctx.fillStyle=bg;ctx.fillRect(0,0,W,Hh);
+ctx.strokeStyle=cssv("--grid");ctx.lineWidth=1;const g=48*view.k;ctx.beginPath();for(let x=((W/2+view.x)%g);x<W;x+=g){ctx.moveTo(x,0);ctx.lineTo(x,Hh)}for(let y=((Hh/2+view.y)%g);y<Hh;y+=g){ctx.moveTo(0,y);ctx.lineTo(W,y)}ctx.stroke();
+if(!chunks.length||!pcs){ctx.fillStyle=mute;ctx.font="15px IBM Plex Sans,sans-serif";ctx.textAlign="center";ctx.fillText("Lo spazio semantico apparirà qui",W/2,Hh/2);return}
+Q.t=Math.min(1,Q.t+.05);const active=Q.top.length>0,topSet=new Map(Q.top);
+if(Q.cur){Q.cur[0]+=(Q.pos[0]-Q.cur[0])*.15;Q.cur[1]+=(Q.pos[1]-Q.cur[1])*.15}
+ctx.font="11px IBM Plex Sans,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+for(const w of terms){const p=wpos(w);if(!p||Q.terms.includes(w))continue;const[x,y]=P(...p);ctx.globalAlpha=active?.18:.4;ctx.fillStyle=mute;ctx.fillText(w,x,y)}
+chunks.forEach((c,i)=>{const[x,y]=P(c.x,c.y),s=topSet.get(i);ctx.globalAlpha=active?(s?1:.22):.75;ctx.fillStyle=docs[c.d].color;ctx.beginPath();ctx.arc(x,y,(s?4+s*10:3.5)+(i==hover?3:0),0,7);ctx.fill();if(i==pin||i==hover){ctx.strokeStyle=ink;ctx.lineWidth=1.5;ctx.stroke()}});
+ctx.globalAlpha=1;
+docs.forEach((d,di)=>{let x=0,y=0,n=0;chunks.forEach(c=>{if(c.d==di){x+=c.x;y+=c.y;n++}});if(!n)return;const[px,py]=P(x/n,y/n);ctx.strokeStyle=d.color;ctx.lineWidth=2;ctx.globalAlpha=.7;ctx.beginPath();ctx.arc(px,py,11,0,7);ctx.stroke();ctx.globalAlpha=1;ctx.font="600 12px IBM Plex Sans,sans-serif";ctx.fillStyle=ink;ctx.fillText(d.name,px,py-20)});
+if(active&&Q.cur){const[qx,qy]=P(...Q.cur);ctx.lineWidth=1.5;Q.top.forEach(([i,s],r)=>{const c=chunks[i],[x,y]=P(c.x,c.y),e=Math.min(1,Q.t*2-r*.05);ctx.globalAlpha=.25+s*.7;ctx.strokeStyle=acc;ctx.beginPath();ctx.moveTo(qx,qy);ctx.lineTo(qx+(x-qx)*Math.max(0,e),qy+(y-qy)*Math.max(0,e));ctx.stroke()});ctx.globalAlpha=1;
+ctx.font="600 12px IBM Plex Sans,sans-serif";Q.terms.forEach(w=>{const p=wpos(w);if(!p)return;const[x,y]=P(...p),tw=ctx.measureText(w).width+10;ctx.fillStyle=Q.toks.includes(w)?acc:cssv("--panel");ctx.strokeStyle=acc;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(x-tw/2,y-9,tw,18,9);ctx.fill();ctx.stroke();ctx.fillStyle=Q.toks.includes(w)?"#fff":ink;ctx.fillText(w,x,y+.5)});
+const pulse=8+4*Math.sin(performance.now()/250);ctx.fillStyle=acc;ctx.beginPath();ctx.arc(qx,qy,6,0,7);ctx.fill();ctx.globalAlpha=.4;ctx.strokeStyle=acc;ctx.lineWidth=2;ctx.beginPath();ctx.arc(qx,qy,pulse+6,0,7);ctx.stroke();ctx.globalAlpha=1}}
+function hit(ex,ey){let b=-1,bd=100;chunks.forEach((c,i)=>{const[x,y]=P(c.x,c.y),d=(x-ex)**2+(y-ey)**2;if(d<bd){bd=d;b=i}});return b}
+let drag=null,moved=0;
+cv.addEventListener("pointerdown",e=>{drag={x:e.clientX,y:e.clientY};moved=0;cv.setPointerCapture(e.pointerId);cv.style.cursor="grabbing"});
+cv.addEventListener("pointermove",e=>{const r=cv.getBoundingClientRect(),tip=$("#tip");
+if(drag){view.x+=e.clientX-drag.x;view.y+=e.clientY-drag.y;moved+=Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y);drag={x:e.clientX,y:e.clientY};return}
+if(!chunks.length)return;const h=hit(e.clientX-r.left,e.clientY-r.top);if(h!=hover){hover=h;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("h",+c.dataset.i==h))}
+if(h>=0){const c=chunks[h];tip.style.display="block";tip.style.left=Math.min(e.clientX-r.left+14,W-290)+"px";tip.style.top=(e.clientY-r.top+14)+"px";tip.innerHTML="<b style='color:"+docs[c.d].color+"'>"+esc(docs[c.d].name)+"</b><br>"+esc(c.text.slice(0,180))+(c.text.length>180?"…":"")}else tip.style.display="none"});
+cv.addEventListener("pointerup",()=>{cv.style.cursor="grab";if(drag&&moved<4&&hover>=0){pin=hover;render()}drag=null});
+cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect(),f=Math.exp(-e.deltaY*.0015),k=Math.min(12,Math.max(.4,view.k*f)),a=k/view.k,cx=e.clientX-r.left-W/2,cy=e.clientY-r.top-Hh/2;view.x=cx-(cx-view.x)*a;view.y=cy-(cy-view.y)*a;view.k=k},{passive:false});
+/* ---------- UI ---------- */
+$("#out").addEventListener("mouseover",e=>{const c=e.target.closest(".card");hover=c?+c.dataset.i:-1;document.querySelectorAll(".card").forEach(x=>x.classList.toggle("h",x==c))});
+$("#files").addEventListener("click",e=>{const t=e.target,i=t.dataset.i,ds=t.dataset.ds;
+if(i!==undefined){docs.splice(+i,1);docs.forEach((d,j)=>d.color=COL[j%COL.length]);Q.cur=null;rebuild()}
+else if(ds){const rest=secs.filter(s=>s.id!=ds);if(!rest.length)return;docs.forEach(d=>{if(d.sec==ds)d.sec=rest[0].id});secs=rest;if(tsel==ds)tsel=rest[0].id;rebuild()}});
+$("#files").addEventListener("change",e=>{const t=e.target,d=t.dataset;
+if(d.s){secs.find(s=>s.id==d.s).on=t.checked;rebuild()}
+else if(d.r){secs.find(s=>s.id==d.r).name=t.value.trim()||"Senza nome";renderSecs();persist()}
+else if(d.m!==undefined){docs[+d.m].sec=t.value;rebuild()}});
+$("#tsec").onchange=e=>{tsel=e.target.value;persist()};
+$("#nsec").onclick=()=>{tsel=addSec("Sezione "+(secs.length+1));renderSecs();persist()};
+let raf=0;$("#q").addEventListener("input",()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(run)});
+const dz=$("#drop"),fi=$("#fi");dz.onclick=()=>fi.click();dz.onkeydown=e=>{if(e.key=="Enter")fi.click()};fi.onchange=()=>{ingest([...fi.files]);fi.value=""};
+["dragover","dragenter"].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();dz.classList.add("on")}));
+["dragleave","drop"].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();dz.classList.remove("on")}));
+document.addEventListener("drop",e=>ingest([...e.dataTransfer.files]));
+$("#cp").onclick=async()=>{const ids=Q.top.length?Q.top.map(s=>s[0]):pin>=0?[pin]:[];if(!ids.length)return;
+const txt="Contesto:\n"+ids.map((i,n)=>"["+(n+1)+"] ("+docs[chunks[i].d].name+") "+chunks[i].text).join("\n\n")+"\n\nDomanda: "+$("#q").value;
+try{await navigator.clipboard.writeText(txt)}catch(_){const t=document.createElement("textarea");t.value=txt;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove()}
+$("#cp").textContent="Copiato";setTimeout(()=>$("#cp").textContent="Copia contesto",1400)};
+$("#demo").onclick=async()=>{const mk=(n,s)=>new File([s],n,{type:"text/plain"});const a=addSec("Cucina"),b=addSec("Tecnologia");const F=[
+mk("cucina-siciliana.txt","La caponata è un piatto di melanzane fritte con sedano, olive e capperi in agrodolce. L’arancina si prepara con riso, ragù di carne e piselli, poi si frigge nell’olio. La pasta alla Norma unisce pomodoro, melanzane e ricotta salata. Il cannolo ha una cialda croccante e un ripieno di ricotta di pecora zuccherata. La granita al limone si serve con la brioche a colazione, soprattutto d’estate. Il pesto trapanese usa mandorle, basilico e pomodori freschi."),
+mk("energia-solare.md","# Fotovoltaico\nI pannelli solari trasformano la luce in elettricità grazie alle celle di silicio. Un inverter converte la corrente continua in alternata per la rete domestica. Le batterie di accumulo conservano l’energia prodotta di giorno per usarla la sera. L’efficienza dei pannelli diminuisce lentamente con gli anni. In Sicilia l’irraggiamento elevato rende l’impianto conveniente. Gli incentivi riducono il tempo di ritorno dell’investimento."),
+mk("reti-neurali.txt","Una rete neurale apprende regolando i pesi tramite la retropropagazione dell’errore. Gli embedding rappresentano parole e frasi come vettori in uno spazio semantico. La similarità del coseno misura quanto due vettori sono vicini. Un sistema RAG recupera frammenti rilevanti e li passa al modello linguistico come contesto. Il chunking divide i documenti in porzioni di poche frasi. Il reranking riordina i risultati per migliorare la precisione.")];await ingest([F[0]],a);await ingest([F[1],F[2]],b)};
+/* ---------- sezioni e persistenza ---------- */
+function secOn(d){return(secs.find(s=>s.id==d.sec)||{}).on!==false}
+function addSec(name){const id="s"+nid++;secs.push({id,name,on:true});return id}
+function renderSecs(){$("#tsec").innerHTML=secs.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");$("#tsec").value=tsel;
+$("#files").innerHTML=secs.map(s=>{const ds=docs.map((d,i)=>[d,i]).filter(x=>x[0].sec==s.id);
+return`<div class="sec${s.on?"":" off"}"><div class="sh"><label class="sw" title="Attiva o disattiva la sezione"><input type="checkbox" data-s="${s.id}" ${s.on?"checked":""} aria-label="Attiva ${esc(s.name)}"><i></i></label><input type="text" data-r="${s.id}" value="${esc(s.name)}" aria-label="Nome sezione"><small>${ds.length}</small>${secs.length>1?`<b data-ds="${s.id}" title="Elimina sezione (i file passano alla prima rimasta)">×</b>`:""}</div>`+(ds.length?"":`<small class="empty">Vuota</small>`)+ds.map(([d,i])=>`<div class="f"><i style="background:${d.color}"></i><span title="${esc(d.name)}">${esc(d.name)}</span><small>${d.parts.length}</small>${secs.length>1?`<select data-m="${i}" aria-label="Sposta in">${secs.map(t=>`<option value="${t.id}"${t.id==s.id?" selected":""}>${esc(t.name)}</option>`).join("")}</select>`:""}<b data-i="${i}" title="Rimuovi">×</b></div>`).join("")+"</div>"}).join("")}
+function state(){return{app:"rag-viz",v:1,saved:new Date().toISOString(),tsel,secs,docs:docs.map(d=>({name:d.name,sec:d.sec,parts:d.parts})),query:$("#q").value}}
+function loadState(o){secs=o.secs&&o.secs.length?o.secs:[{id:"s1",name:"Generale",on:true}];
+docs=(o.docs||[]).map((d,i)=>({name:d.name,sec:secs.some(s=>s.id==d.sec)?d.sec:secs[0].id,parts:d.parts||[],color:COL[i%COL.length]}));
+tsel=secs.some(s=>s.id==o.tsel)?o.tsel:secs[0].id;nid=Math.max(1,...secs.map(s=>+String(s.id).slice(1)||0))+1;$("#q").value=o.query||"";Q.cur=null;rebuild()}
+function persist(){try{localStorage.setItem("ragviz",JSON.stringify(state()))}catch(_){}}
+function restore(){try{const t=localStorage.getItem("ragviz");if(t){loadState(JSON.parse(t));return}}catch(_){}renderSecs()}
+function tick(b,t){const o=b.textContent;b.textContent=t;setTimeout(()=>b.textContent=o,1500)}
+$("#save").onclick=async()=>{const txt=JSON.stringify(state(),null,1),fn="rag-viz-"+new Date().toISOString().slice(0,10)+".json";
+try{const dl=window.claude?await claude.use("downloads"):null;if(dl){await dl.save({filename:fn,data:txt});tick($("#save"),"Salvato");return}}catch(err){if(err&&err.code=="declined")return}
+const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/json"}));a.download=fn;a.click();tick($("#save"),"Salvato")};
+$("#load").onclick=()=>$("#lf").click();
+$("#lf").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;try{const o=JSON.parse(await f.text());if(o.app!=="rag-viz")throw 0;loadState(o)}catch(_){$("#stat").textContent="File non valido: serve un .json salvato da RAG viz"}};
+restore();draw();
+</script></body></html>
